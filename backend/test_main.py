@@ -83,6 +83,39 @@ def test_signup_invalid_data(setup_database):
     )
     assert response.status_code == 422
 
+def test_signup_duplicate_username(setup_database):
+    # First signup
+    client.post(
+        "/api/signup",
+        json={
+            "email": "test1@example.com",
+            "password": "password123",
+            "username": "testuser"
+        }
+    )
+    # Second signup with same username
+    response = client.post(
+        "/api/signup",
+        json={
+            "email": "test2@example.com",
+            "password": "password123",
+            "username": "testuser"
+        }
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Username already taken"
+
+def test_signup_empty_username(setup_database):
+    response = client.post(
+        "/api/signup",
+        json={
+            "email": "test@example.com",
+            "password": "password123",
+            "username": ""
+        }
+    )
+    assert response.status_code == 422
+
 def test_login_success(setup_database):
     # First create a user
     client.post(
@@ -138,6 +171,16 @@ def test_login_nonexistent_user(setup_database):
     assert response.status_code == 401
     assert response.json()["detail"] == "Incorrect email or password"
 
+def test_login_empty_credentials(setup_database):
+    response = client.post(
+        "/api/login",
+        data={
+            "username": "",
+            "password": ""
+        }
+    )
+    assert response.status_code == 422
+
 def test_get_current_user(setup_database):
     # First create a user and login
     client.post(
@@ -173,4 +216,62 @@ def test_get_current_user_invalid_token(setup_database):
         headers={"Authorization": "Bearer invalid_token"}
     )
     assert response.status_code == 401
-    assert response.json()["detail"] == "Could not validate credentials" 
+    assert response.json()["detail"] == "Could not validate credentials"
+
+def test_get_current_user_no_token(setup_database):
+    response = client.get("/api/me")
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Not authenticated"
+
+def test_get_current_user_expired_token(setup_database):
+    # Create a user and get a token
+    client.post(
+        "/api/signup",
+        json={
+            "email": "test@example.com",
+            "password": "password123",
+            "username": "testuser"
+        }
+    )
+    login_response = client.post(
+        "/api/login",
+        data={
+            "username": "test@example.com",
+            "password": "password123"
+        }
+    )
+    token = login_response.json()["access_token"]
+    
+    # Modify the token to make it expired
+    expired_token = token.split('.')[0] + '.' + token.split('.')[1] + '.expired'
+    
+    # Try to get current user with expired token
+    response = client.get(
+        "/api/me",
+        headers={"Authorization": f"Bearer {expired_token}"}
+    )
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Could not validate credentials"
+
+def test_login_special_characters(setup_database):
+    # Create a user with special characters in username
+    client.post(
+        "/api/signup",
+        json={
+            "email": "test@example.com",
+            "password": "password123",
+            "username": "test@user#$%"
+        }
+    )
+    # Try to login
+    response = client.post(
+        "/api/login",
+        data={
+            "username": "test@example.com",
+            "password": "password123"
+        }
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "access_token" in data
+    assert data["token_type"] == "bearer" 

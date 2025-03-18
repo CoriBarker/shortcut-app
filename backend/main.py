@@ -9,6 +9,7 @@ from jose import JWTError, jwt
 import models
 import database
 from passlib.context import CryptContext
+from pydantic import validator
 
 app = FastAPI()
 
@@ -38,6 +39,12 @@ class UserCreate(BaseModel):
 
     class Config:
         from_attributes = True
+
+    @validator('username')
+    def username_not_empty(cls, v):
+        if not v.strip():
+            raise ValueError('Username cannot be empty')
+        return v.strip()
 
 class UserResponse(BaseModel):
     id: int
